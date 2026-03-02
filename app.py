@@ -138,6 +138,7 @@ def cached_endpoint(ttl=300):
 from datetime import datetime
 import pytz
 
+
 @app.route('/player-info')
 @cached_endpoint()
 def get_account_info():
@@ -145,39 +146,76 @@ def get_account_info():
     if not uid:
         return jsonify({"error": "Please provide UID."}), 400
 
+    def get_rank_tier(rank_number):
+        if rank_number >= 330:
+            return "heroic"
+        elif rank_number >= 320:
+            return "diamond"
+        elif rank_number >= 310:
+            return "platinum"
+        elif rank_number >= 300:
+            return "gold"
+        else:
+            return "unranked"
+
     def process_data(data):
         try:
-            # 🔹 Format Last Login
+            pk = pytz.timezone("Asia/Karachi")
+
+            # ✅ Last Login Decode
             if "lastLoginAt" in data["basicInfo"]:
-                timestamp = int(data["basicInfo"]["lastLoginAt"])
-                pk = pytz.timezone("Asia/Karachi")
+                ts = int(data["basicInfo"]["lastLoginAt"])
                 data["basicInfo"]["lastLoginFormatted"] = datetime.fromtimestamp(
-                    timestamp, pk
+                    ts, pk
                 ).strftime("%d %B %Y, %I:%M %p PKT")
 
-            # 🔹 Badge Image
+            # ✅ Creation Date Decode
+            if "createAt" in data["basicInfo"]:
+                ts = int(data["basicInfo"]["createAt"])
+                data["basicInfo"]["createAtFormatted"] = datetime.fromtimestamp(
+                    ts, pk
+                ).strftime("%d %B %Y, %I:%M %p PKT")
+
+            # ✅ Region Flag Image
+            region = data["basicInfo"].get("region", "").lower()
+            if region:
+                data["basicInfo"]["regionFlag"] = f"https://flagcdn.com/w80/{region}.png"
+
+            # ✅ Rank Badge Image
+            rank_number = data["basicInfo"].get("rank", 0)
+            tier = get_rank_tier(rank_number)
+            data["basicInfo"]["rankTier"] = tier
+            data["basicInfo"]["rankBadgeImage"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/ranks/{tier}.png"
+
+            # ✅ CS Rank Badge
+            cs_rank_number = data["basicInfo"].get("csRank", 0)
+            cs_tier = get_rank_tier(cs_rank_number)
+            data["basicInfo"]["csRankTier"] = cs_tier
+            data["basicInfo"]["csRankBadgeImage"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/ranks/{cs_tier}.png"
+
+            # ✅ Badge Image
             badge_id = data["basicInfo"].get("badgeId")
             if badge_id:
                 data["basicInfo"]["badgeImage"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{badge_id}.png"
 
-            # 🔹 Title Image
+            # ✅ Title Image
             title_id = data["basicInfo"].get("title")
             if title_id:
                 data["basicInfo"]["titleImage"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{title_id}.png"
 
-            # 🔹 Head Image
+            # ✅ Head Image
             head_id = data["basicInfo"].get("headPic")
             if head_id:
                 data["basicInfo"]["headImage"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{head_id}.png"
 
-            # 🔹 Weapon Images
+            # ✅ Weapon Images
             weapon_ids = data["basicInfo"].get("weaponSkinShows", [])
             data["basicInfo"]["weaponImages"] = [
                 f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{wid}.png"
                 for wid in weapon_ids
             ]
 
-            # 🔹 Pet Images
+            # ✅ Pet Images
             if "petInfo" in data:
                 pet_id = data["petInfo"].get("id")
                 skin_id = data["petInfo"].get("skinId")
@@ -194,7 +232,7 @@ def get_account_info():
         return data
 
 
-    # 🔁 Try Cached Region
+    # 🔁 Cached Region
     if uid in uid_region_cache:
         try:
             return_data = asyncio.run(
