@@ -137,121 +137,86 @@ def cached_endpoint(ttl=300):
 
 from datetime import datetime
 import pytz
+from datetime import datetime
+import pytz
 
+def process_data(data):
+    try:
+        pk = pytz.timezone("Asia/Karachi")
 
-@app.route('/player-info')
-@cached_endpoint()
-def get_account_info():
-    uid = request.args.get('uid')
-    if not uid:
-        return jsonify({"error": "Please provide UID."}), 400
+        # 🔹 Last Login
+        if "lastLoginAt" in data["basicInfo"]:
+            ts = int(data["basicInfo"]["lastLoginAt"])
+            data["basicInfo"]["lastLoginAt"] = datetime.fromtimestamp(
+                ts, pk
+            ).strftime("%d %B %Y, %I:%M %p PKT")
 
-    def get_rank_tier(rank_number):
-        if rank_number >= 330:
-            return "heroic"
-        elif rank_number >= 320:
-            return "diamond"
-        elif rank_number >= 310:
-            return "platinum"
-        elif rank_number >= 300:
-            return "gold"
-        else:
+        # 🔹 Account Creation Date
+        if "createAt" in data["basicInfo"]:
+            ts = int(data["basicInfo"]["createAt"])
+            data["basicInfo"]["createAt"] = datetime.fromtimestamp(
+                ts, pk
+            ).strftime("%d %B %Y, %I:%M %p PKT")
+
+        # 🔹 Captain Creation & Last Login
+        if "captainBasicInfo" in data:
+            cap = data["captainBasicInfo"]
+            if "createAt" in cap:
+                ts = int(cap["createAt"])
+                cap["createAt"] = datetime.fromtimestamp(
+                    ts, pk
+                ).strftime("%d %B %Y, %I:%M %p PKT")
+            if "lastLoginAt" in cap:
+                ts = int(cap["lastLoginAt"])
+                cap["lastLoginAt"] = datetime.fromtimestamp(
+                    ts, pk
+                ).strftime("%d %B %Y, %I:%M %p PKT")
+
+        # 🔹 Region Flag
+        region = data["basicInfo"].get("region", "").lower()
+        if region:
+            data["basicInfo"]["regionFlag"] = f"https://flagcdn.com/w80/{region}.png"
+
+        # 🔹 Rank Badge
+        def get_rank_tier(rank):
+            if rank >= 330: return "heroic"
+            if rank >= 320: return "diamond"
+            if rank >= 310: return "platinum"
+            if rank >= 300: return "gold"
             return "unranked"
 
-    def process_data(data):
-        try:
-            pk = pytz.timezone("Asia/Karachi")
+        rank_number = data["basicInfo"].get("rank", 0)
+        tier = get_rank_tier(rank_number)
+        data["basicInfo"]["rankBadgeImage"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/ranks/{tier}.png"
 
-            # ✅ Last Login Decode
-            if "lastLoginAt" in data["basicInfo"]:
-                ts = int(data["basicInfo"]["lastLoginAt"])
-                data["basicInfo"]["lastLoginFormatted"] = datetime.fromtimestamp(
-                    ts, pk
-                ).strftime("%d %B %Y, %I:%M %p PKT")
+        cs_rank_number = data["basicInfo"].get("csRank", 0)
+        cs_tier = get_rank_tier(cs_rank_number)
+        data["basicInfo"]["csRankBadgeImage"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/ranks/{cs_tier}.png"
 
-            # ✅ Creation Date Decode
-            if "createAt" in data["basicInfo"]:
-                ts = int(data["basicInfo"]["createAt"])
-                data["basicInfo"]["createAtFormatted"] = datetime.fromtimestamp(
-                    ts, pk
-                ).strftime("%d %B %Y, %I:%M %p PKT")
+        # 🔹 Badge, Title, Head Images
+        for key in ["badgeId", "title", "headPic"]:
+            if data["basicInfo"].get(key):
+                data["basicInfo"][f"{key}Image"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{data['basicInfo'][key]}.png"
 
-            # ✅ Region Flag Image
-            region = data["basicInfo"].get("region", "").lower()
-            if region:
-                data["basicInfo"]["regionFlag"] = f"https://flagcdn.com/w80/{region}.png"
+        # 🔹 Weapon Images
+        weapon_ids = data["basicInfo"].get("weaponSkinShows", [])
+        data["basicInfo"]["weaponImages"] = [
+            f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{wid}.png"
+            for wid in weapon_ids
+        ]
 
-            # ✅ Rank Badge Image
-            rank_number = data["basicInfo"].get("rank", 0)
-            tier = get_rank_tier(rank_number)
-            data["basicInfo"]["rankTier"] = tier
-            data["basicInfo"]["rankBadgeImage"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/ranks/{tier}.png"
+        # 🔹 Pet Images
+        if "petInfo" in data:
+            pet = data["petInfo"]
+            if pet.get("id"):
+                pet["petIcon"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{pet['id']}.png"
+            if pet.get("skinId"):
+                pet["petSkinImage"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{pet['skinId']}.png"
 
-            # ✅ CS Rank Badge
-            cs_rank_number = data["basicInfo"].get("csRank", 0)
-            cs_tier = get_rank_tier(cs_rank_number)
-            data["basicInfo"]["csRankTier"] = cs_tier
-            data["basicInfo"]["csRankBadgeImage"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/ranks/{cs_tier}.png"
+    except Exception as e:
+        print("Error processing data:", e)
 
-            # ✅ Badge Image
-            badge_id = data["basicInfo"].get("badgeId")
-            if badge_id:
-                data["basicInfo"]["badgeImage"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{badge_id}.png"
-
-            # ✅ Title Image
-            title_id = data["basicInfo"].get("title")
-            if title_id:
-                data["basicInfo"]["titleImage"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{title_id}.png"
-
-            # ✅ Head Image
-            head_id = data["basicInfo"].get("headPic")
-            if head_id:
-                data["basicInfo"]["headImage"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{head_id}.png"
-
-            # ✅ Weapon Images
-            weapon_ids = data["basicInfo"].get("weaponSkinShows", [])
-            data["basicInfo"]["weaponImages"] = [
-                f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{wid}.png"
-                for wid in weapon_ids
-            ]
-
-            # ✅ Pet Images
-            if "petInfo" in data:
-                pet_id = data["petInfo"].get("id")
-                skin_id = data["petInfo"].get("skinId")
-
-                if pet_id:
-                    data["petInfo"]["petIcon"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{pet_id}.png"
-
-                if skin_id:
-                    data["petInfo"]["petSkinImage"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{skin_id}.png"
-
-        except Exception as e:
-            print("Processing error:", e)
-
-        return data
-
-
-    # 🔁 Cached Region
-    if uid in uid_region_cache:
-        try:
-            return_data = asyncio.run(
-                GetAccountInformation(uid, "7", uid_region_cache[uid], "/GetPlayerPersonalShow")
-            )
-            return jsonify(process_data(return_data))
-        except:
-            pass
-
-    # 🔁 Try All Regions
-    for region in SUPPORTED_REGIONS:
-        try:
-            return_data = asyncio.run(
-                GetAccountInformation(uid, "7", region, "/GetPlayerPersonalShow")
-            )
-            uid_region_cache[uid] = region
-            return jsonify(process_data(return_data))
-        except:
-            continue
+    return data
 
     return jsonify({"error": "UID not found in any region."}), 404
 @app.route('/refresh', methods=['GET','POST'])
