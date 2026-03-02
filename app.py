@@ -142,26 +142,60 @@ def get_account_info():
     if not uid:
         return jsonify({"error": "Please provide UID."}), 400
 
-    # Check cached region for UID
+    def process_data(data):
+        try:
+            # Format last login
+            timestamp = int(data["basicInfo"]["lastLoginAt"])
+            pk_tz = pytz.timezone("Asia/Karachi")
+            data["basicInfo"]["lastLoginFormatted"] = datetime.fromtimestamp(timestamp, pk_tz).strftime("%d %B %Y, %I:%M %p PKT")
+            
+            # Badge Image
+            badge_id = data["basicInfo"].get("badgeId")
+            data["basicInfo"]["badgeImage"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{badge_id}.png" if badge_id else None
+
+            # Head Image
+            head_id = data["basicInfo"].get("headPic")
+            data["basicInfo"]["headImage"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{head_id}.png" if head_id else None
+
+            # Weapon Skin Images
+            weapon_ids = data["basicInfo"].get("weaponSkinShows", [])
+            data["basicInfo"]["weaponImages"] = [
+                f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{wid}.png"
+                for wid in weapon_ids
+            ]
+
+            # Pet Images
+            pet = data.get("petInfo", {})
+            pet_skin = pet.get("skinId")
+            pet_id = pet.get("id")
+            data["petInfo"]["petImage"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{pet_skin}.png" if pet_skin else None
+            data["petInfo"]["petIcon"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{pet_id}.png" if pet_id else None
+
+        except Exception as e:
+            print("Error:", e)
+        return data
+
+
+    # Try cached region
     if uid in uid_region_cache:
         try:
             return_data = asyncio.run(GetAccountInformation(uid, "7", uid_region_cache[uid], "/GetPlayerPersonalShow"))
-            formatted_json = json.dumps(return_data, indent=2, ensure_ascii=False)
-            return formatted_json, 200, {'Content-Type': 'application/json; charset=utf-8'}
+            return_data = process_data(return_data)
+            return jsonify(return_data)
         except:
-            pass  # fallback to testing all regions
+            pass
 
+    # Try all regions
     for region in SUPPORTED_REGIONS:
         try:
             return_data = asyncio.run(GetAccountInformation(uid, "7", region, "/GetPlayerPersonalShow"))
             uid_region_cache[uid] = region
-            formatted_json = json.dumps(return_data, indent=2, ensure_ascii=False)
-            return formatted_json, 200, {'Content-Type': 'application/json; charset=utf-8'}
+            return_data = process_data(return_data)
+            return jsonify(return_data)
         except:
             continue
 
     return jsonify({"error": "UID not found in any region."}), 404
-
 @app.route('/refresh', methods=['GET','POST'])
 def refresh_tokens_endpoint():
     try:
