@@ -135,6 +135,9 @@ def cached_endpoint(ttl=300):
 
 # === Flask Routes ===
 
+from datetime import datetime
+import pytz
+
 @app.route('/player-info')
 @cached_endpoint()
 def get_account_info():
@@ -144,54 +147,71 @@ def get_account_info():
 
     def process_data(data):
         try:
-            # Format last login
-            timestamp = int(data["basicInfo"]["lastLoginAt"])
-            pk_tz = pytz.timezone("Asia/Karachi")
-            data["basicInfo"]["lastLoginFormatted"] = datetime.fromtimestamp(timestamp, pk_tz).strftime("%d %B %Y, %I:%M %p PKT")
-            
-            # Badge Image
+            # 🔹 Format Last Login
+            if "lastLoginAt" in data["basicInfo"]:
+                timestamp = int(data["basicInfo"]["lastLoginAt"])
+                pk = pytz.timezone("Asia/Karachi")
+                data["basicInfo"]["lastLoginFormatted"] = datetime.fromtimestamp(
+                    timestamp, pk
+                ).strftime("%d %B %Y, %I:%M %p PKT")
+
+            # 🔹 Badge Image
             badge_id = data["basicInfo"].get("badgeId")
-            data["basicInfo"]["badgeImage"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{badge_id}.png" if badge_id else None
+            if badge_id:
+                data["basicInfo"]["badgeImage"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{badge_id}.png"
 
-            # Head Image
+            # 🔹 Title Image
+            title_id = data["basicInfo"].get("title")
+            if title_id:
+                data["basicInfo"]["titleImage"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{title_id}.png"
+
+            # 🔹 Head Image
             head_id = data["basicInfo"].get("headPic")
-            data["basicInfo"]["headImage"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{head_id}.png" if head_id else None
+            if head_id:
+                data["basicInfo"]["headImage"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{head_id}.png"
 
-            # Weapon Skin Images
+            # 🔹 Weapon Images
             weapon_ids = data["basicInfo"].get("weaponSkinShows", [])
             data["basicInfo"]["weaponImages"] = [
                 f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{wid}.png"
                 for wid in weapon_ids
             ]
 
-            # Pet Images
-            pet = data.get("petInfo", {})
-            pet_skin = pet.get("skinId")
-            pet_id = pet.get("id")
-            data["petInfo"]["petImage"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{pet_skin}.png" if pet_skin else None
-            data["petInfo"]["petIcon"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{pet_id}.png" if pet_id else None
+            # 🔹 Pet Images
+            if "petInfo" in data:
+                pet_id = data["petInfo"].get("id")
+                skin_id = data["petInfo"].get("skinId")
+
+                if pet_id:
+                    data["petInfo"]["petIcon"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{pet_id}.png"
+
+                if skin_id:
+                    data["petInfo"]["petSkinImage"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{skin_id}.png"
 
         except Exception as e:
-            print("Error:", e)
+            print("Processing error:", e)
+
         return data
 
 
-    # Try cached region
+    # 🔁 Try Cached Region
     if uid in uid_region_cache:
         try:
-            return_data = asyncio.run(GetAccountInformation(uid, "7", uid_region_cache[uid], "/GetPlayerPersonalShow"))
-            return_data = process_data(return_data)
-            return jsonify(return_data)
+            return_data = asyncio.run(
+                GetAccountInformation(uid, "7", uid_region_cache[uid], "/GetPlayerPersonalShow")
+            )
+            return jsonify(process_data(return_data))
         except:
             pass
 
-    # Try all regions
+    # 🔁 Try All Regions
     for region in SUPPORTED_REGIONS:
         try:
-            return_data = asyncio.run(GetAccountInformation(uid, "7", region, "/GetPlayerPersonalShow"))
+            return_data = asyncio.run(
+                GetAccountInformation(uid, "7", region, "/GetPlayerPersonalShow")
+            )
             uid_region_cache[uid] = region
-            return_data = process_data(return_data)
-            return jsonify(return_data)
+            return jsonify(process_data(return_data))
         except:
             continue
 
