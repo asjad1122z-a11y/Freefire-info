@@ -140,85 +140,85 @@ import pytz
 from datetime import datetime
 import pytz
 
-def process_data(data):
-    try:
-        pk = pytz.timezone("Asia/Karachi")
+@app.route('/player-info')
+@cached_endpoint()
+def get_account_info():
+    uid = request.args.get('uid')
+    if not uid:
+        return jsonify({"error": "Please provide UID."}), 400
 
-        # 🔹 Last Login
-        if "lastLoginAt" in data["basicInfo"]:
-            ts = int(data["basicInfo"]["lastLoginAt"])
-            data["basicInfo"]["lastLoginAt"] = datetime.fromtimestamp(
-                ts, pk
-            ).strftime("%d %B %Y, %I:%M %p PKT")
-
-        # 🔹 Account Creation Date
-        if "createAt" in data["basicInfo"]:
-            ts = int(data["basicInfo"]["createAt"])
-            data["basicInfo"]["createAt"] = datetime.fromtimestamp(
-                ts, pk
-            ).strftime("%d %B %Y, %I:%M %p PKT")
-
-        # 🔹 Captain Creation & Last Login
-        if "captainBasicInfo" in data:
-            cap = data["captainBasicInfo"]
-            if "createAt" in cap:
-                ts = int(cap["createAt"])
-                cap["createAt"] = datetime.fromtimestamp(
-                    ts, pk
-                ).strftime("%d %B %Y, %I:%M %p PKT")
-            if "lastLoginAt" in cap:
-                ts = int(cap["lastLoginAt"])
-                cap["lastLoginAt"] = datetime.fromtimestamp(
-                    ts, pk
+    def process_data(data):
+        try:
+            # 🔹 Format Last Login
+            if "lastLoginAt" in data["basicInfo"]:
+                timestamp = int(data["basicInfo"]["lastLoginAt"])
+                pk = pytz.timezone("Asia/Karachi")
+                data["basicInfo"]["lastLoginFormatted"] = datetime.fromtimestamp(
+                    timestamp, pk
                 ).strftime("%d %B %Y, %I:%M %p PKT")
 
-        # 🔹 Region Flag
-        region = data["basicInfo"].get("region", "").lower()
-        if region:
-            data["basicInfo"]["regionFlag"] = f"https://flagcdn.com/w80/{region}.png"
+            # 🔹 Badge Image
+            badge_id = data["basicInfo"].get("badgeId")
+            if badge_id:
+                data["basicInfo"]["badgeImage"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{badge_id}.png"
 
-        # 🔹 Rank Badge
-        def get_rank_tier(rank):
-            if rank >= 330: return "heroic"
-            if rank >= 320: return "diamond"
-            if rank >= 310: return "platinum"
-            if rank >= 300: return "gold"
-            return "unranked"
+            # 🔹 Title Image
+            title_id = data["basicInfo"].get("title")
+            if title_id:
+                data["basicInfo"]["titleImage"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{title_id}.png"
 
-        rank_number = data["basicInfo"].get("rank", 0)
-        tier = get_rank_tier(rank_number)
-        data["basicInfo"]["rankBadgeImage"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/ranks/{tier}.png"
+            # 🔹 Head Image
+            head_id = data["basicInfo"].get("headPic")
+            if head_id:
+                data["basicInfo"]["headImage"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{head_id}.png"
 
-        cs_rank_number = data["basicInfo"].get("csRank", 0)
-        cs_tier = get_rank_tier(cs_rank_number)
-        data["basicInfo"]["csRankBadgeImage"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/ranks/{cs_tier}.png"
+            # 🔹 Weapon Images
+            weapon_ids = data["basicInfo"].get("weaponSkinShows", [])
+            data["basicInfo"]["weaponImages"] = [
+                f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{wid}.png"
+                for wid in weapon_ids
+            ]
 
-        # 🔹 Badge, Title, Head Images
-        for key in ["badgeId", "title", "headPic"]:
-            if data["basicInfo"].get(key):
-                data["basicInfo"][f"{key}Image"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{data['basicInfo'][key]}.png"
+            # 🔹 Pet Images
+            if "petInfo" in data:
+                pet_id = data["petInfo"].get("id")
+                skin_id = data["petInfo"].get("skinId")
 
-        # 🔹 Weapon Images
-        weapon_ids = data["basicInfo"].get("weaponSkinShows", [])
-        data["basicInfo"]["weaponImages"] = [
-            f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{wid}.png"
-            for wid in weapon_ids
-        ]
+                if pet_id:
+                    data["petInfo"]["petIcon"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{pet_id}.png"
 
-        # 🔹 Pet Images
-        if "petInfo" in data:
-            pet = data["petInfo"]
-            if pet.get("id"):
-                pet["petIcon"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{pet['id']}.png"
-            if pet.get("skinId"):
-                pet["petSkinImage"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{pet['skinId']}.png"
+                if skin_id:
+                    data["petInfo"]["petSkinImage"] = f"https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/{skin_id}.png"
 
-    except Exception as e:
-        print("Error processing data:", e)
+        except Exception as e:
+            print("Processing error:", e)
 
-    return data
+        return data
+
+
+    # 🔁 Try Cached Region
+    if uid in uid_region_cache:
+        try:
+            return_data = asyncio.run(
+                GetAccountInformation(uid, "7", uid_region_cache[uid], "/GetPlayerPersonalShow")
+            )
+            return jsonify(process_data(return_data))
+        except:
+            pass
+
+    # 🔁 Try All Regions
+    for region in SUPPORTED_REGIONS:
+        try:
+            return_data = asyncio.run(
+                GetAccountInformation(uid, "7", region, "/GetPlayerPersonalShow")
+            )
+            uid_region_cache[uid] = region
+            return jsonify(process_data(return_data))
+        except:
+            continue
 
     return jsonify({"error": "UID not found in any region."}), 404
+
 @app.route('/refresh', methods=['GET','POST'])
 def refresh_tokens_endpoint():
     try:
